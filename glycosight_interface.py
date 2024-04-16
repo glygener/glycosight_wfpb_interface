@@ -6,17 +6,22 @@ from flask_cors import CORS, cross_origin
 # See SO: https://stackoverflow.com/a/31867108
 # import Celery
 import base64
-import docker
+import configparser
+import fcntl
 import json
 import logging
 import os
-import pandas as pd
+import requests
 import time
 
 from hashlib import md5
-from io import StringIO
 
-WORK_DIR = os.path.abspath("./tmp")
+BASE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__)))
+WORK_DIR = os.path.join(BASE_PATH, "./tmp")
+LOCK_DIR = os.path.join(BASE_PATH, "./locks")
+
+# valid_lock_files = ["file1.lock", "file2.lock", "file3.lock"]
+valid_lock_files = ["file1.lock"]
 
 app = Flask(__name__)
 cors = CORS(app, resources={r"/api/*": {"origins": ["http://localhost"]}})
@@ -27,9 +32,48 @@ app.config["DOWNLOAD_FOLDER"] = os.path.join(
 
 app.logger.setLevel(logging.DEBUG)
 
-user_string = f"{os.geteuid()}:{os.getegid()}"
-client = docker.from_env()
-glycosight_command = '/GlycoSight/bin/nlinkedsites.sh "*.gz"'
+config = configparser.ConfigParser()
+config.read(os.path.join(BASE_PATH, "./.env"))
+
+FLASK_MODE = config["mode"]["mode"]
+ANALYSIS_BACKEND = config[FLASK_MODE]["BackendBaseURL"]
+ANALYSIS_PORT_BASE = int(config[FLASK_MODE]["BasePort"])
+SHIM = (
+    True
+    if "Shim" in config[FLASK_MODE] and config[FLASK_MODE].getboolean("Shim")
+    else False
+)
+
+ANALYSIS_URL = ANALYSIS_BACKEND + ":{}"
+
+
+class LockManager:
+    def __init__(self):
+        self.lockedfiles = {}
+
+    def acquire_lock(self):
+        for lockname in valid_lock_files:
+            # Acquire locks
+            lock_path = os.path.join(LOCK_DIR, lockname)
+            try:
+                fd = open(lock_path)
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self.lockedfiles[lockname] = fd
+                return lockname
+            except Exception as e:
+                # app.logger.debug(f"Exception {e} on {lockname}. Trying next file")
+                continue
+        return False
+
+    def release_lock(self, lockname):
+        fd = self.lockedfiles[lockname]
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        except:
+            raise
+
+
+lock_manager = LockManager()
 
 
 @app.route("/ping", methods=["GET"])
@@ -68,32 +112,39 @@ def analyze():
     session_timer = 20
     refresh_interval = 0.5
 
-    container = client.containers.run(
-        "glyomics/glycosight:1.1.0",
-        detach=True,
-        volumes={WORK_DIR: {"bind": "/data/", "mode": "rw"}},
-        command=glycosight_command,
-        user=user_string,
-    )
-
     counter = 0
     start = time.time()
     app.logger.debug("...Analysis launched")
 
-    while container.status != "exited":
+    # Block response until lock is acquired
+    lockname = lock_manager.acquire_lock()
+    while not lockname:
         time.sleep(1)
-        container.reload()
-        if counter > int(session_timer / refresh_interval):
-            container.kill()
-            container.remove()
-            # TODO Error handling
-            return jsonify({"error": "Timeout reached"})
-    analysis_output = StringIO(
-        "\n".join(container.logs().decode("utf-8").split("\n")[2:])
+        app.logger.debug("---> Did not get a lock. Trying again ...")
+        lockname = lock_manager.acquire_lock()
+    # Launch analysis in Flask docker
+
+    analysis_target = (
+        ANALYSIS_URL.format(
+            ANALYSIS_PORT_BASE + int(lockname.split(".")[0].lstrip("file"))
+        )
+        + "/perform-analysis"
     )
-    container.remove()
-    # Format the output for display
-    output_df = pd.read_table(analysis_output)
-    output = output_df.to_dict(orient="records")
-    app.logger.debug(f"...Analysis complete. Required {time.time() - start:.1f} s")
-    return jsonify({"results": output})
+    app.logger.debug(f"Targeting analysis on port {analysis_target}")
+
+    # Get response and return
+    if SHIM:
+        app.logger.debug("Sleeping 10 seconds while pretending to work")
+        time.sleep(10)
+        lock_manager.release_lock(lockname)
+        return jsonify({"results": "complete"})
+    app.logger.debug("Sending analysis request downstream")
+    try:
+        response = requests.get(analysis_target)
+        if response.status_code != 200:
+            lock_manager.release_lock(lockname)
+            return jsonify({"errror": response.status_code})
+    except:
+        raise
+    lock_manager.release_lock(lockname)
+    return jsonify(json.loads((response.content.decode("utf-8"))))

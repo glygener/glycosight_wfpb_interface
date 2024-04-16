@@ -1,4 +1,5 @@
 data/*
+locks
 #
 # Created by https://www.toptal.com/developers/gitignore/api/flask,vuejs
 # Edit at https://www.toptal.com/developers/gitignore?templates=flask,vuejs

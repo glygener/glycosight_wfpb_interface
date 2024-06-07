@@ -117,7 +117,7 @@ const baseURL = import.meta.env.DEV ? import.meta.env.VITE_DEV_MIDDLEWARE_BASE +
         },
         async analyzeFiles() {
             this.message = "Analyzing..."
-            const analysisURL = baseURL + "/analyze"
+            const analysisURL = baseURL + "/standalone-analyze"
             const response = await fetch(analysisURL)
             if (!response.ok) {
                 // Error handling

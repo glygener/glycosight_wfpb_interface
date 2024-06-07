@@ -6,7 +6,7 @@ class UploadFilesService {
     // const formData = new FormData();
     // console.log("...Uploading?")
     // const urlDest = "/".concat(target, "-upload/");
-    const fullURL = baseURL + `/upload?q=${target}&n=${fileName}`;
+    const fullURL = baseURL + `/standalone-upload?q=${target}&n=${fileName}`;
     // const headers = {
     //   "Content-type": "application/json",
     //   "X-CSRFToken": userStore.token,

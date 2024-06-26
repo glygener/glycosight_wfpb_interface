@@ -1,0 +1,16 @@
+# docker build -t wfpb-glycosight-backend -f dockerfile.backend .
+FROM glyomics/glycosight:1.1.0
+
+USER root
+COPY requirements.txt glycosight_server.py wsgi.py app.config /flask/
+
+RUN DEBIAN_FRONTEND=noninteractive apt update && \
+    rm -rf /data/config/ && \
+    apt-get install -y python3-pip vim && \
+    pip3 install --upgrade pip && \
+    pip3 install -r /flask/requirements.txt && \
+    mkdir -p /var/log/gunicorn
+
+WORKDIR /flask
+    
+# CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--access-logfile", "/var/log/gunicorn/dev.log", "wsgi:app"]

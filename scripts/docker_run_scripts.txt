@@ -1,0 +1,5 @@
+docker run --rm -d --network wfpb -p 5000:5000 --name wfpb-interface --mount src=$(pwd)/tmp/,target=/data,type=bind wfpb:glycosight-interface-base flask --app glycosight_interface.py run --port=5000 --host=0.0.0.0
+
+docker run --rm -it --network wfpb --net=host -p 5000:5000 --name wfpb-interface --mount src=$(pwd)/tmp/,target=/data,type=bind wfpb:glycosight-interface-base bash
+
+flask --app glycosight_interface.py run --port=5000 --host=0.0.0.0

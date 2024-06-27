@@ -1,0 +1,5 @@
+# docker build -t wfpb-glycosight-interface -f dockerfile.interface .
+FROM glycosight-interface-base
+
+COPY glycosight_interface.py app.config /flask/
+

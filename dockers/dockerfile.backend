@@ -1,0 +1,7 @@
+
+# docker build -t glycosight-backend -f dockerfile.backend .
+FROM glycosight-backend-base
+
+COPY glycosight_server.py app.config /flask/
+    
+# CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--access-logfile", "/var/log/gunicorn/dev.log", "wsgi:app"]

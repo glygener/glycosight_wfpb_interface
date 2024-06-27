@@ -1,7 +1,7 @@
 # docker build -t wfpb-glycosight-interface-base -f dockerfile.interface.base .
 FROM python:3.10-slim-buster
 
-COPY requirements.txt glycosight_interface.py wsgi.py app.config /flask/
+COPY requirements.txt wsgi.py /flask/
 
 RUN DEBIAN_FRONTEND=noninteractive apt update && \
     pip install -r /flask/requirements.txt && \

@@ -79,7 +79,7 @@ else:
         # Blow up the files
         for f in os.listdir(target_dir):
             if f.endswith("gz"):
-                os.remove(f)
+                os.remove(os.path.join(target_dir, f))
 
         return io.StringIO(completed_process.stdout)
 

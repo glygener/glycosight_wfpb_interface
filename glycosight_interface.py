@@ -21,7 +21,9 @@ WORK_DIR = os.path.join(BASE_PATH, "tmp")
 LOCK_DIR = os.path.join(BASE_PATH, "locks")
 
 app = Flask(__name__)
-cors = CORS(app, resources={r"/api/*": {"origins": ["http://localhost"]}})
+cors = CORS(app, resources={r"/api/*": {
+    "origins": ["http://localhost", "https://aws.glygen.org"]}
+    })
 app.config["CORS_HEADERS"] = ["Content-Type", "Access-Control-Allow-Origin"]
 app.config["DOWNLOAD_FOLDER"] = os.path.join(
     os.path.dirname(app.instance_path), "models"
@@ -98,6 +100,7 @@ def run_analysis(lockname=None):
 
     # Block response until lock is acquired
     if lockname is None:
+        shim_interface = True
         lockname = lock_manager.acquire_lock()
         while not lockname:
             time.sleep(1)
@@ -107,6 +110,8 @@ def run_analysis(lockname=None):
             if counter > session_timer:
                 app.logger.debug("Session timeout error")
                 return {"error": "No compute available, try again later"}
+    else:
+        shim_interface = False
 
     # Launch analysis in Flask docker
 
@@ -114,8 +119,11 @@ def run_analysis(lockname=None):
 
     analysis_target = (
         ANALYSIS_URL.format(lock_number, ANALYSIS_PORT_BASE + int(lock_number))
-        + f"/perform-analysis?q={lock_number}"
+        + f"/perform-analysis"
     )
+    if not shim_interface:
+        analysis_target += f"?q={lock_number}"
+
     app.logger.debug(f"Targeting analysis on address target {analysis_target}")
 
     # Get response and return

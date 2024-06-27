@@ -3,6 +3,8 @@
 docker stop glycosight-interface
 docker rm glycosight-interface
 
+docker rmi glycosight-interface
+
 pushd .. 2>&1 > /dev/null
 
 docker build -t glycosight-interface -f dockers/dockerfile.interface .

@@ -7,7 +7,7 @@ pushd .. 2>&1 > /dev/null
 rm locks/file*.lock
 
 echo Starting interface server ...
-docker run --rm -d --network wfpb --name glycosight-interface \
+docker run --rm -d --network wfpb --name glycosight-interface -p 5050:5000 \
     --mount src=$(pwd)/tmp/,target=/flask/tmp,type=bind \
     --mount src=$(pwd)/locks/,target=/flask/locks,type=bind \
     glycosight-interface flask --app glycosight_interface.py run --port=5000 --host=0.0.0.0

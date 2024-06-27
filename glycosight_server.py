@@ -55,11 +55,13 @@ else:
 
     def run_analysis(dir_name=None, logger=None):
 
-        SUB_DIR = f"{DATA_DIR}" if dir_name is None else f"{dir_name}"
+        SUB_DIR = "" if dir_name is None else f"/{dir_name}"
+
+        target_files = '"{}{}/*.gz"'.format(DATA_DIR, SUB_DIR)
 
         glycosight_command = [
             "/GlycoSight/bin/nlinkedsites.sh",
-            '"{}/{}/*.gz"'.format(DATA_DIR, SUB_DIR),
+            target_files,
         ]
         if logger is not None:
             logger.debug(f"===> Running command {glycosight_command}")
@@ -72,6 +74,9 @@ else:
         if completed_process.stderr or completed_process.check_returncode():
             # Do something?
             ...
+
+        # Blow up the files
+        os.system(f"rm {target_files}")
 
         return io.StringIO(completed_process.stdout)
 

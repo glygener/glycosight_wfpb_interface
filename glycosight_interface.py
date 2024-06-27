@@ -17,11 +17,8 @@ import time
 from hashlib import md5
 
 BASE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__)))
-WORK_DIR = os.path.join(BASE_PATH, "./tmp")
-LOCK_DIR = os.path.join(BASE_PATH, "./locks")
-
-# valid_lock_files = ["file1.lock", "file2.lock", "file3.lock"]
-valid_lock_files = ["file1.lock"]
+WORK_DIR = os.path.join(BASE_PATH, "tmp")
+LOCK_DIR = os.path.join(BASE_PATH, "locks")
 
 app = Flask(__name__)
 cors = CORS(app, resources={r"/api/*": {"origins": ["http://localhost"]}})
@@ -32,19 +29,30 @@ app.config["DOWNLOAD_FOLDER"] = os.path.join(
 
 app.logger.setLevel(logging.DEBUG)
 
+# valid_lock_files = ["file1.lock", "file2.lock", "file3.lock"]
+valid_lock_files = []
+for f in os.listdir("./locks"):
+    if f.startswith("file"):
+        valid_lock_files.append(f)
+
+app.logger.debug(f"Found lock files: {valid_lock_files}")
+
+
 config = configparser.ConfigParser()
-config.read(os.path.join(BASE_PATH, "./.env"))
+config.read(os.path.join(BASE_PATH, "./app.config"))
 
 FLASK_MODE = config["mode"]["mode"]
 ANALYSIS_BACKEND = config[FLASK_MODE]["BackendBaseURL"]
 ANALYSIS_PORT_BASE = int(config[FLASK_MODE]["BasePort"])
+DRS_FILE_STORE_URL = config[FLASK_MODE]["WFPBInterfaceURL"]
+
 SHIM = (
     True
     if "Shim" in config[FLASK_MODE] and config[FLASK_MODE].getboolean("Shim")
     else False
 )
 
-ANALYSIS_URL = ANALYSIS_BACKEND + ":{}"
+ANALYSIS_URL = ANALYSIS_BACKEND + "-{}:{}"
 
 
 ############################### HELPERS ############################
@@ -64,7 +72,7 @@ class LockManager:
                 self.lockedfiles[lockname] = fd
                 return lockname
             except Exception as e:
-                # app.logger.debug(f"Exception {e} on {lockname}. Trying next file")
+                app.logger.debug(f"Exception {e} on {lockname}. Trying next file")
                 continue
         return False
 
@@ -79,7 +87,7 @@ class LockManager:
 lock_manager = LockManager()
 
 
-def run_analysis():
+def run_analysis(lockname=None):
 
     session_timer = 20
     refresh_interval = 0.5
@@ -89,25 +97,26 @@ def run_analysis():
     app.logger.debug("...Analysis launched")
 
     # Block response until lock is acquired
-    lockname = lock_manager.acquire_lock()
-    while not lockname:
-        time.sleep(1)
-        app.logger.debug("---> Did not get a lock. Trying again ...")
+    if lockname is None:
         lockname = lock_manager.acquire_lock()
-        counter += 1
-        if counter > session_timer:
-            app.logger.debug("Session timeout error")
-            return {"error": "No compute available, try again later"}
+        while not lockname:
+            time.sleep(1)
+            app.logger.debug("---> Did not get a lock. Trying again ...")
+            lockname = lock_manager.acquire_lock()
+            counter += 1
+            if counter > session_timer:
+                app.logger.debug("Session timeout error")
+                return {"error": "No compute available, try again later"}
 
     # Launch analysis in Flask docker
 
+    lock_number = lockname.split(".")[0].lstrip("file")
+
     analysis_target = (
-        ANALYSIS_URL.format(
-            ANALYSIS_PORT_BASE + int(lockname.split(".")[0].lstrip("file"))
-        )
-        + "/perform-analysis"
+        ANALYSIS_URL.format(lock_number, ANALYSIS_PORT_BASE + int(lock_number))
+        + f"/perform-analysis?q={lock_number}"
     )
-    app.logger.debug(f"Targeting analysis on port {analysis_target}")
+    app.logger.debug(f"Targeting analysis on address target {analysis_target}")
 
     # Get response and return
     if SHIM:
@@ -117,7 +126,9 @@ def run_analysis():
         return {"results": "complete"}
     app.logger.debug("Sending analysis request downstream")
     try:
-        response = requests.get(analysis_target)
+        response = requests.get(
+            analysis_target, headers={"Access-Control-Allow-Origin": "*"}
+        )
         if response.status_code != 200:
             lock_manager.release_lock(lockname)
             return {"error": response.status_code}
@@ -159,9 +170,9 @@ def upload_and_analyze():
         locator = target.rsplit("/")[-1]
         app.logger.debug(f"Found URI locator {locator}")
         resourceURI = (
-            f"http://localhost:3000/ga4gh/drs/v1/objects/{locator}/access/https/data"
+            f"{DRS_FILE_STORE_URL}/ga4gh/drs/v1/objects/{locator}/access/https/data"
         )
-
+        app.logger.debug(f"---> Targeting URI {resourceURI}")
         response = requests.request("GET", resourceURI)
         if response.status_code != 200:
             # Error handling?
@@ -170,6 +181,21 @@ def upload_and_analyze():
 
     else:
         raise Exception("Engaging self destruct ... NOW")
+
+    # Block response until lock is acquired
+    counter = 0
+    session_timer = 20
+
+    lockname = lock_manager.acquire_lock()
+    while not lockname:
+        time.sleep(1)
+        app.logger.debug("---> Did not get a lock. Trying again ...")
+        lockname = lock_manager.acquire_lock()
+        counter += 1
+        if counter > session_timer:
+            app.logger.debug("Session timeout error")
+            return {"error": "No compute available, try again later"}
+
     # Write data to disk
     start = time.time()
     data = response.content
@@ -178,12 +204,13 @@ def upload_and_analyze():
     app.logger.debug(
         f"\n====== DATA\n\t-- Length {len(data)}\n\t-- Hash: {file_hash}\n\t-- Time needed: {duration * 1000:.1f} ms\n========="
     )
-    with open(os.path.join(WORK_DIR, file_name), "wb") as fp:
+    lock_number = lockname.split(".")[0].lstrip("file")
+    with open(os.path.join(WORK_DIR, lock_number, file_name), "wb") as fp:
         fp.write(data)
     fp.close()
 
     # Launch analysis
-    result = run_analysis()
+    result = run_analysis(lockname=lockname)
     return jsonify(result)
 
 

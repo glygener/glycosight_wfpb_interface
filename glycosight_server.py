@@ -9,10 +9,10 @@ import time
 import subprocess
 
 BASE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__)))
-DATA_DIR = os.path.join(BASE_PATH, "./tmp")
+DATA_DIR = os.path.join(BASE_PATH, "tmp")
 
 config = configparser.ConfigParser()
-config.read(os.path.join(BASE_PATH, "./.env"))
+config.read(os.path.join(BASE_PATH, "./app.config"))
 
 app = Flask(__name__)
 app.logger.setLevel(logging.DEBUG)
@@ -28,7 +28,7 @@ if FLASK_MODE == "dev":
     glycosight_command = '/GlycoSight/bin/nlinkedsites.sh "*.gz"'
     user_string = f"{os.geteuid()}:{os.getegid()}"
 
-    def run_analysis():
+    def run_analysis(dir_name=None):
         app.logger.debug("*" * 40)
         app.logger.debug("\t\tRUNNING ANALYSIS")
         app.logger.debug("*" * 40)
@@ -53,11 +53,16 @@ if FLASK_MODE == "dev":
 else:
     app.logger.debug("Found FLASK environment")
 
-    def run_analysis():
+    def run_analysis(dir_name=None, logger=None):
+
+        SUB_DIR = f"{DATA_DIR}" if dir_name is None else f"{dir_name}"
+
         glycosight_command = [
             "/GlycoSight/bin/nlinkedsites.sh",
-            '"{}/*.gz"'.format(DATA_DIR),
+            '"{}/{}/*.gz"'.format(DATA_DIR, SUB_DIR),
         ]
+        if logger is not None:
+            logger.debug(f"===> Running command {glycosight_command}")
         timeout = 3600  # 1 hour for a run
         start = time.time()
         completed_process = subprocess.run(
@@ -68,17 +73,27 @@ else:
             # Do something?
             ...
 
-        return completed_process.stdout
+        return io.StringIO(completed_process.stdout)
+
+
+@app.route("/ping")
+def ping():
+    return "PONG\n"
 
 
 @app.route("/perform-analysis")
 def glycosight_analysis():
 
+    directory_name = request.args.get("q", None)
+
     # Format the output for display
     start = time.time()
-    glycosight_results = run_analysis()
-    output_df = pd.read_table(glycosight_results)
-    output = output_df.to_dict(orient="records")
+    try:
+        glycosight_results = run_analysis(directory_name, app.logger)
+        output_df = pd.read_table(glycosight_results)
+        output = output_df.to_dict(orient="records")
+    except Exception as e:
+        app.logger.critical(f"Exception:\n{e}")
     app.logger.debug(f"...Analysis complete. Required {time.time() - start:.1f} s")
     return jsonify({"results": output})
 

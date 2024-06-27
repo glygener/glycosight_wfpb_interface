@@ -57,7 +57,7 @@ else:
 
         SUB_DIR = "" if dir_name is None else f"/{dir_name}"
 
-        target_dir = '"{}{}"'.format(DATA_DIR, SUB_DIR)
+        target_dir = "{}{}".format(DATA_DIR, SUB_DIR)
         target_files = target_dir + "/*.gz"
 
         glycosight_command = [

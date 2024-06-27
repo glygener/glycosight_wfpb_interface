@@ -83,7 +83,7 @@
 
 import UploadService from "@/components/UploadService";
 
-const baseURL = import.meta.env.DEV ? import.meta.env.VITE_DEV_MIDDLEWARE_BASE + 'api': "api";
+const baseURL = import.meta.env.DEV ? import.meta.env.VITE_DEV_MIDDLEWARE_BASE + '/api': "api";
 
   export default {
     name: "upload-files",

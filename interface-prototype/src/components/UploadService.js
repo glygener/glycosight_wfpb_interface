@@ -2,7 +2,7 @@ class UploadFilesService {
 
   async upload(fileName, fileData, target, onUploadProgress) {
 
-    const baseURL = import.meta.env.DEV ? import.meta.env.VITE_DEV_MIDDLEWARE_BASE + 'api': "api";
+    const baseURL = import.meta.env.DEV ? import.meta.env.VITE_DEV_MIDDLEWARE_BASE + '/api': "api";
     // const formData = new FormData();
     // console.log("...Uploading?")
     // const urlDest = "/".concat(target, "-upload/");

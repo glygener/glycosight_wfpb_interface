@@ -1,9 +1,7 @@
 # build with docker build -t wfpb-ui dockerfile.wfpb.ui .
-FROM wfpb-ui-base
+FROM wfpb-ui-initial
 
-COPY . /playbook
-WORKDIR /playbook
-
-RUN npm install && pip install --break-system-packages -r wfpb_requirements.txt
+COPY ./ui.patch /playbook/
+RUN git apply ui.patch
 
 CMD ["npm", "run", "dev"]

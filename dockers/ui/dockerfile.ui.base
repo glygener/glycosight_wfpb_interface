@@ -1,5 +1,5 @@
-# build with docker build -t wfpb-ui dockerfile.wfpb.ui .
-FROM wfpb-ui-base
+# build with docker build -t wfpb-ui-initial dockerfile.ui.base .
+FROM wfpb-ui-base:latest
 
 COPY . /playbook
 WORKDIR /playbook

@@ -74,8 +74,10 @@ else:
         )
         # Error handling
         if completed_process.stderr or completed_process.check_returncode():
-            # Do something?
-            ...
+            app.logger.error(f"ERROR: stderr is {completed_process.stderr}")
+            app.logger.error(
+                f"ERROR: Return code was {completed_process.check_returncode()}"
+            )
 
         # Blow up the files
         for f in os.listdir(target_dir):

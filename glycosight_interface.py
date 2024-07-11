@@ -195,8 +195,8 @@ def upload_and_analyze():
         chunk_size = 4096
         while not request.stream.closed:
             chunk = request.stream.read(chunk_size)
-            # if len(chunk) == 0:
-            #     break
+            if len(chunk) == 0:
+                break
             fp.write(chunk)
     fp.close()
 

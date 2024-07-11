@@ -74,10 +74,13 @@ else:
         )
         # Error handling
         if completed_process.stderr or completed_process.check_returncode():
-            app.logger.error(f"ERROR: stderr is {completed_process.stderr}")
-            app.logger.error(
-                f"ERROR: Return code was {completed_process.check_returncode()}"
-            )
+            # Error handling. Note that GlycoSight uses stderr for some logging
+            #   to avoid polluting the stdout stream (with results)
+            # app.logger.error(f"ERROR: stderr is {completed_process.stderr}")
+            # app.logger.error(
+            #     f"ERROR: Return code was {completed_process.check_returncode()}"
+            # )
+            ...
 
         # Blow up the files
         for f in os.listdir(target_dir):

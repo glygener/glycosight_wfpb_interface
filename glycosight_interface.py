@@ -182,17 +182,20 @@ def ping():
 @cross_origin("Access-Control-Allow-Origin")
 def upload_and_analyze():
     file_name = request.args.get("n", None)
-    if file_name is None:
+    file_size = int(request.args.get("s", None))
+    if file_name is None or file_size is None:
         # Error handling
-        return jsonify({"error": "No file name found, aborting"})
-    app.logger.debug(f"Got request! Filename was {file_name}")
+        return jsonify({"error": "No file name or size found, aborting"})
+    app.logger.debug(f"Got request! Filename was {file_name}, total size {file_size}")
 
     # cf https://blog.pelicandd.com/article/80
     # Write stream to disk
+    bytes_remaining = file_size
     with open(f"{WORK_DIR}/{file_name}", "wb") as fp:
         chunk_size = 4096
         while not request.stream.closed:
             chunk = request.stream.read(chunk_size)
+            bytes_remaining -= len(chunk)
             # if len(chunk) == 0:
             #     break
             fp.write(chunk)

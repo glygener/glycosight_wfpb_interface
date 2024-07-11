@@ -191,12 +191,10 @@ def upload_and_analyze():
     # Write stream to disk
     with open(f"{WORK_DIR}/{file_name}", "wb") as fp:
         chunk_size = 4096
-        counter = 0
-        while True:
+        while not request.stream.closed():
             chunk = request.stream.read(chunk_size)
-            counter += 1
-            if len(chunk) == 0:
-                break
+            # if len(chunk) == 0:
+            #     break
             fp.write(chunk)
     fp.close()
 

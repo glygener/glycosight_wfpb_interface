@@ -25,18 +25,19 @@ if FLASK_MODE == "dev":
 
     client = docker.from_env()
 
-    glycosight_command = '/GlycoSight/bin/nlinkedsites.sh "*.gz"'
+    glycosight_command = '/GlycoSight/bin/nlinkedsites.sh "{}*.gz"'
     user_string = f"{os.geteuid()}:{os.getegid()}"
 
-    def run_analysis(dir_name=None):
+    def run_analysis(dir_name=None, logger=None):
         app.logger.debug("*" * 40)
         app.logger.debug("\t\tRUNNING ANALYSIS")
         app.logger.debug("*" * 40)
+        arg = "" if dir_name is None else f"{dir_name}/"
         container = client.containers.run(
             "glyomics/glycosight:1.1.0",
             detach=True,
             volumes={DATA_DIR: {"bind": "/data/", "mode": "rw"}},
-            command=glycosight_command,
+            command=glycosight_command.format(arg),
             user=user_string,
         )
 

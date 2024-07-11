@@ -190,12 +190,11 @@ def upload_and_analyze():
 
     # cf https://blog.pelicandd.com/article/80
     # Write stream to disk
-    bytes_remaining = file_size
+    # bytes_remaining = file_size
     with open(f"{WORK_DIR}/{file_name}", "wb") as fp:
         chunk_size = 4096
         while not request.stream.closed:
             chunk = request.stream.read(chunk_size)
-            bytes_remaining -= len(chunk)
             # if len(chunk) == 0:
             #     break
             fp.write(chunk)

@@ -196,7 +196,6 @@ def upload_and_analyze():
             chunk = request.stream.read(chunk_size)
             counter += 1
             if len(chunk) == 0:
-                app.logger.debug("===> Chunk size is 0!!!")
                 break
             fp.write(chunk)
     fp.close()

@@ -53,9 +53,12 @@ SHIM = (
     if "Shim" in config[FLASK_MODE] and config[FLASK_MODE].getboolean("Shim")
     else False
 )
-
-ANALYSIS_URL = ANALYSIS_BACKEND + "-{}:{}"
-
+if FLASK_MODE == "dev":
+    ANALYSIS_URL = ANALYSIS_BACKEND + ":{}"
+    SINGLE_BACKEND = True
+else:
+    ANALYSIS_URL = ANALYSIS_BACKEND + "-{}:{}"
+    SINGLE_BACKEND = False
 
 ############################### HELPERS ############################
 
@@ -116,11 +119,17 @@ def run_analysis(lockname=None):
     # Launch analysis in Flask docker
 
     lock_number = lockname.split(".")[0].lstrip("file")
+    if not SINGLE_BACKEND:
+        analysis_target = (
+            ANALYSIS_URL.format(lock_number, ANALYSIS_PORT_BASE + int(lock_number))
+            + f"/perform-analysis"
+        )
+    else:
+        analysis_target = (
+            ANALYSIS_URL.format(ANALYSIS_PORT_BASE + int(lock_number))
+            + f"/perform-analysis"
+        )
 
-    analysis_target = (
-        ANALYSIS_URL.format(lock_number, ANALYSIS_PORT_BASE + int(lock_number))
-        + f"/perform-analysis"
-    )
     if not shim_interface:
         analysis_target += f"?q={lock_number}"
 

@@ -21,9 +21,10 @@ WORK_DIR = os.path.join(BASE_PATH, "tmp")
 LOCK_DIR = os.path.join(BASE_PATH, "locks")
 
 app = Flask(__name__)
-cors = CORS(app, resources={r"/api/*": {
-    "origins": ["http://localhost", "https://aws.glygen.org"]}
-    })
+cors = CORS(
+    app,
+    resources={r"/api/*": {"origins": ["http://localhost", "https://aws.glygen.org"]}},
+)
 app.config["CORS_HEADERS"] = ["Content-Type", "Access-Control-Allow-Origin"]
 app.config["DOWNLOAD_FOLDER"] = os.path.join(
     os.path.dirname(app.instance_path), "models"
@@ -180,24 +181,27 @@ def ping():
 @app.route("/api/upload-and-analyze", methods=["POST"])
 @cross_origin("Access-Control-Allow-Origin")
 def upload_and_analyze():
-    target = request.args.get("q", None)
     file_name = request.args.get("n", None)
-    app.logger.debug(f"Got request! Target URL was {target}. Filename was {file_name}")
-    if target.startswith("drs"):
-        locator = target.rsplit("/")[-1]
-        app.logger.debug(f"Found URI locator {locator}")
-        resourceURI = (
-            f"{DRS_FILE_STORE_URL}/ga4gh/drs/v1/objects/{locator}/access/https/data"
-        )
-        app.logger.debug(f"---> Targeting URI {resourceURI}")
-        response = requests.request("GET", resourceURI)
-        if response.status_code != 200:
-            # Error handling?
-            app.logger.debug("===> ERROR NOTED <===")
-            return jsonify(DUMMY_DATA)
+    if file_name is None:
+        # Error handling
+        return jsonify({"error": "No file name found, aborting"})
+    app.logger.debug(f"Got request! Filename was {file_name}")
 
-    else:
-        raise Exception("Engaging self destruct ... NOW")
+    # cf https://blog.pelicandd.com/article/80
+    # Write stream to disk
+    with open(f"{WORK_DIR}/{file_name}", "wb") as fp:
+        chunk_size = 4096
+        counter = 0
+        while True:
+            chunk = request.stream.read(chunk_size)
+            counter += 1
+            if counter % 1000 == 0:
+                app.logger.debug(f"Iteration {counter}")
+            if len(chunk) == 0:
+                app.logger.debug("===> Chunk size is 0!!!")
+                break
+            fp.write(chunk)
+    fp.close()
 
     # Block response until lock is acquired
     counter = 0
@@ -211,20 +215,12 @@ def upload_and_analyze():
         counter += 1
         if counter > session_timer:
             app.logger.debug("Session timeout error")
+            os.remove(f"{WORK_DIR}/{file_name}")
             return {"error": "No compute available, try again later"}
 
-    # Write data to disk
-    start = time.time()
-    data = response.content
-    file_hash = md5(data).hexdigest()
-    duration = time.time() - start
-    app.logger.debug(
-        f"\n====== DATA\n\t-- Length {len(data)}\n\t-- Hash: {file_hash}\n\t-- Time needed: {duration * 1000:.1f} ms\n========="
-    )
+    # Move file to lock directory
     lock_number = lockname.split(".")[0].lstrip("file")
-    with open(os.path.join(WORK_DIR, lock_number, file_name), "wb") as fp:
-        fp.write(data)
-    fp.close()
+    os.rename(f"{WORK_DIR}/{file_name}", f"{WORK_DIR}/{lock_number}/{file_name}")
 
     # Launch analysis
     result = run_analysis(lockname=lockname)

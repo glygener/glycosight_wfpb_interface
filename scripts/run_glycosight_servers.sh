@@ -24,14 +24,14 @@ for i in $(seq 1 $SERVER_COUNT); do
 done
 
 echo Starting interface server ...
-docker run --rm -d --network wfpb --name glycosight-interface -p 5050:5000 \
+docker run --restart always -d --network wfpb --name glycosight-interface -p 5050:5000 \
     --mount src=$(pwd)/tmp/,target=/flask/tmp,type=bind \
     --mount src=$(pwd)/locks/,target=/flask/locks,type=bind \
     glycosight-interface flask --app glycosight_interface.py run --port=5000 --host=0.0.0.0
 
 for i in $(seq 1 $SERVER_COUNT); do
     echo Starting backend server: $i
-    docker run --rm -d --network wfpb --name glycosight-backend-$i \
+    docker run --restart always -d --network wfpb --name glycosight-backend-$i \
         --mount src=$(pwd)/tmp/,target=/flask/tmp,type=bind \
         --mount src=$(pwd)/locks/,target=/flask/locks,type=bind \
         glycosight-backend flask --app glycosight_server.py run --port=500$i --host=0.0.0.0

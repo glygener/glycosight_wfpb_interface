@@ -6,6 +6,7 @@ import logging
 import os
 import pandas as pd
 import time
+import tarfile
 import subprocess
 
 BASE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__)))
@@ -19,16 +20,73 @@ app.logger.setLevel(logging.DEBUG)
 
 FLASK_MODE = config["mode"]["mode"]
 
+
+def get_dir(dir_name=None):
+    return f"{DATA_DIR}" if dir_name is None else f"{DATA_DIR}/{dir_name}"
+
+
+def untar_file(dir, file):
+    tar = tarfile.open(os.path.join(dir, file))
+    tar.extractall(path=dir)
+    tar.close()
+    os.remove(os.path.join(dir, file))
+
+
+def process_output(output_as_list, logger=None):
+    while not output_as_list[0].startswith("UniProtAcc"):
+        test = output_as_list.pop(0)
+        if logger:
+            logger.debug(f"===> Popped line {test}")
+    return output_as_list
+
+
+def process_input_files(dir_name):
+
+    dir = get_dir(dir_name)
+
+    for parent_dir, directories, files in os.walk(dir):
+        if parent_dir != dir:
+            continue
+        file = [f for f in files if f.endswith("gz")]
+    if len(file) > 1:
+        app.logger.debug(f"Too many files in {dir}: {files}")
+        app.logger.debug("Aborting")
+        return False
+
+    file = file[0]
+    if file.endswith("tar.gz") or file.endswith(".tgz"):
+        untar_file(dir, file)
+
+    return True
+
+
+def remove_input_files(dir):
+    for file in os.listdir(dir):
+        if file.endswith("gz"):
+            os.remove(os.path.join(dir, file))
+
+
 if FLASK_MODE == "dev":
     app.logger.debug("Found DEVELOPMENT environment")
     import docker
 
     client = docker.from_env()
 
-    glycosight_command = '/GlycoSight/bin/nlinkedsites.sh "{}*.gz"'
     user_string = f"{os.geteuid()}:{os.getegid()}"
 
     def run_analysis(dir_name=None, logger=None):
+
+        if not process_input_files(dir_name):
+            return io.String("Error\tAborting")
+
+        dir = get_dir(dir_name)
+
+        glycosight_command = (
+            '/GlycoSight/bin/nlinkedsites.sh "{}*.gz"'
+            if dir_name is None
+            else '/GlycoSight/bin/nlinkedsites.sh "{}/{0}*.gz"'.format(dir_name)
+        )
+
         app.logger.debug("*" * 40)
         app.logger.debug("\t\tRUNNING ANALYSIS")
         app.logger.debug("*" * 40)
@@ -46,10 +104,19 @@ if FLASK_MODE == "dev":
             container.reload()
             if container.status == "exited":
                 output = io.StringIO(
-                    "\n".join(container.logs().decode("utf-8").split("\n")[2:])
+                    "\n".join(
+                        process_output(
+                            container.logs().decode("utf-8").split("\n"), app.logger
+                        )
+                    )
                 )
                 container.remove()
-                return output
+
+        if not remove_input_files(dir):
+            # Error handling?
+            ...
+
+        return output
 
 else:
     app.logger.debug("Found FLASK environment")
@@ -60,6 +127,9 @@ else:
 
         target_dir = "{}{}".format(DATA_DIR, SUB_DIR)
         target_files = target_dir + "/*.gz"
+
+        if not process_input_files(dir_name):
+            return io.String("Error\tAborting")
 
         glycosight_command = [
             "/GlycoSight/bin/nlinkedsites.sh",
@@ -83,9 +153,10 @@ else:
             ...
 
         # Blow up the files
-        for f in os.listdir(target_dir):
-            if f.endswith("gz"):
-                os.remove(os.path.join(target_dir, f))
+        dir = get_dir(dir_name)
+        if not remove_input_files(dir):
+            # Error handling?
+            ...
 
         return io.StringIO(completed_process.stdout)
 

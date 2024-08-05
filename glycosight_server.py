@@ -1,10 +1,12 @@
 from flask import Flask, request, Response, send_from_directory, jsonify
 
 import configparser
+import gzip
 import io
 import logging
 import os
 import pandas as pd
+import shutil
 import time
 import tarfile
 import subprocess
@@ -32,6 +34,23 @@ def untar_file(dir, file):
     os.remove(os.path.join(dir, file))
 
 
+def create_archive(file, dir, logger=None):
+    file_full_path = os.path.join(dir, file)
+    arc_path = os.path.basename(dir)
+    gz_name = file + ".gz"
+    if logger:
+        logger.debug(f"\nFile: {file}\nArc Path: {arc_path}\ngz Name: {gz_name}")
+
+    cwd = os.getcwd()
+    os.chdir(os.path.basename(arc_path))
+    with open(file_full_path, "rb") as f_in:
+        with gzip.open(gz_name, "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+
+    os.chdir(cwd)
+    os.remove(file_full_path)
+
+
 def process_output(output_as_list, logger=None):
     while not output_as_list[0].startswith("UniProtAcc"):
         test = output_as_list.pop(0)
@@ -47,7 +66,7 @@ def process_input_files(dir_name):
     for parent_dir, directories, files in os.walk(dir):
         if parent_dir != dir:
             continue
-        file = [f for f in files if f.endswith("gz")]
+        file = [f for f in files if (f.endswith("gz") or f.endswith("mzid"))]
     if len(file) > 1:
         app.logger.debug(f"Too many files in {dir}: {files}")
         app.logger.debug("Aborting")
@@ -56,6 +75,8 @@ def process_input_files(dir_name):
     file = file[0]
     if file.endswith("tar.gz") or file.endswith(".tgz"):
         untar_file(dir, file)
+    elif file.endswith(".mzid"):
+        create_archive(file, dir, app.logger)
 
     return True
 

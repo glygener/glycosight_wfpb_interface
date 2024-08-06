@@ -61,7 +61,8 @@ def process_output(output_as_list, logger=None):
     while not output_as_list[0].startswith("UniProtAcc"):
         test = output_as_list.pop(0)
         if logger:
-            logger.debug(f"===> Popped line {test}")
+            # logger.debug(f"===> Popped line {test}")
+            ...
     return output_as_list
 
 
@@ -82,9 +83,9 @@ def process_input_files(dir_name):
     if file.endswith("tar.gz") or file.endswith(".tgz"):
         untar_file(dir, file)
     elif file.endswith(".mzid"):
-        app.logger.debug(f"===> Creating archive with file {file}; dir {dir} <===")
+        # app.logger.debug(f"===> Creating archive with file {file}; dir {dir} <===")
         create_archive(file, dir, app.logger)
-        app.logger.debug("===> Archive created! <===")
+        # app.logger.debug("===> Archive created! <===")
     return True
 
 

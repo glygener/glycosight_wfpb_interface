@@ -11,16 +11,22 @@ import time
 import tarfile
 import subprocess
 
-BASE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__)))
-DATA_DIR = os.path.join(BASE_PATH, "tmp")
-
 config = configparser.ConfigParser()
-config.read(os.path.join(BASE_PATH, "./app.config"))
+config.read("./app.config")
 
 app = Flask(__name__)
 app.logger.setLevel(logging.DEBUG)
 
 FLASK_MODE = config["mode"]["mode"]
+
+BASE_PATH = (
+    os.path.abspath(os.path.join(os.path.dirname(__file__)))
+    if FLASK_MODE == "dev"
+    else "/flask"
+)
+
+DATA_DIR = os.path.join(BASE_PATH, "tmp") if FLASK_MODE == "dev" else "/flask/tmp"
+DOCKER_DIR = "/data" if FLASK_MODE == "dev" else None
 
 
 def get_dir(dir_name=None):
@@ -36,13 +42,13 @@ def untar_file(dir, file):
 
 def create_archive(file, dir, logger=None):
     file_full_path = os.path.join(dir, file)
-    arc_path = os.path.basename(dir)
+    arc_path = dir
     gz_name = file + ".gz"
     if logger:
         logger.debug(f"\nFile: {file}\nArc Path: {arc_path}\ngz Name: {gz_name}")
 
     cwd = os.getcwd()
-    os.chdir(os.path.basename(arc_path))
+    os.chdir(arc_path)
     with open(file_full_path, "rb") as f_in:
         with gzip.open(gz_name, "wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
@@ -76,8 +82,9 @@ def process_input_files(dir_name):
     if file.endswith("tar.gz") or file.endswith(".tgz"):
         untar_file(dir, file)
     elif file.endswith(".mzid"):
+        app.logger.debug(f"===> Creating archive with file {file}; dir {dir} <===")
         create_archive(file, dir, app.logger)
-
+        app.logger.debug("===> Archive created! <===")
     return True
 
 
@@ -102,21 +109,21 @@ if FLASK_MODE == "dev":
 
         dir = get_dir(dir_name)
 
+        arg = "" if dir_name is None else f"{dir_name}/"
         glycosight_command = (
-            '/GlycoSight/bin/nlinkedsites.sh "{}*.gz"'
+            f'/GlycoSight/bin/nlinkedsites.sh "{DOCKER_DIR}/*.gz"'
             if dir_name is None
-            else '/GlycoSight/bin/nlinkedsites.sh "{}/{0}*.gz"'.format(dir_name)
+            else f'/GlycoSight/bin/nlinkedsites.sh "{DOCKER_DIR}/{dir_name}/*.gz"'
         )
 
         app.logger.debug("*" * 40)
         app.logger.debug("\t\tRUNNING ANALYSIS")
         app.logger.debug("*" * 40)
-        arg = "" if dir_name is None else f"{dir_name}/"
         container = client.containers.run(
             "glyomics/glycosight:1.1.0",
             detach=True,
             volumes={DATA_DIR: {"bind": "/data/", "mode": "rw"}},
-            command=glycosight_command.format(arg),
+            command=glycosight_command,
             user=user_string,
         )
 
